@@ -1,0 +1,99 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Template to create intraday lambda function with sqs, dlq and i am role.
+Parameters:
+  IntradaySourceQueueName:
+    Type: String
+    Description: Intraday standard queue name
+  IntradayDeadLetterQueueName:
+    Type: String
+    Description: Intraday deadletter Queue name
+  IntradayIAMroleName:
+    Type: String
+    Description: Intraday i am role name
+  LambdaFunctionName:
+    Type: String
+    Description: Lambda function name.
+Resources:
+  IntradaySourceQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName:
+        Ref: IntradaySourceQueueName
+      RedrivePolicy:
+        deadLetterTargetArn:
+          Fn::GetAtt:
+            - IntradayDeadLetterQueue
+            - Arn
+        maxReceiveCount: 2
+  IntradayDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName:
+        Ref: IntradayDeadLetterQueueName
+  IntradayIAMrole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName:
+        Ref: IntradayIAMroleName
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+                - glue.amazonaws.com
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: intradaysqslambdaexecutionpolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:*
+                  - sqs:*
+                  - ssm:*
+                Resource: '*'
+        - PolicyName: intradaylambdacloudwatchexecutiontpolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: logs:CreateLogGroup
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+  intradaysqslambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: 
+        Ref: LambdaFunctionName
+      Handler: intraday.lambda_handler
+      Role:
+        Fn::GetAtt:
+          - IntradayIAMrole
+          - Arn
+      Code:
+        ZipFile: |
+          def lambda_handler(event, context):
+            message = "Hello Lambda World!!!"
+            return message
+      Runtime: python3.7
+      MemorySize: 128
+      Timeout: 30
+    DependsOn:
+      - IntradayIAMrole
+  lambdaSqs:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      Enabled: true
+      EventSourceArn: arn:aws:sqs:us-east-2:470174335172:intraday_sqs
+      FunctionName:
+        Ref: intradaysqslambda

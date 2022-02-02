@@ -1,0 +1,99 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Template to create price survey lambda function with sqs, dlq and i am role.
+Parameters:
+  PriceSurveySourceQueueName:
+    Type: String
+    Description: Price survey standard queue name
+  PriceSurveyDeadLetterQueueName:
+    Type: String
+    Description: Price survey deadletter Queue name
+  PriceSurveyIAMroleName:
+    Type: String
+    Description: Price survey i am role name
+  LambdaFunctionName:
+    Type: String
+    Description: Lambda function name.
+Resources:
+  PriceSurveySourceQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName:
+        Ref: PriceSurveySourceQueueName
+      RedrivePolicy:
+        deadLetterTargetArn:
+          Fn::GetAtt:
+            - PriceSurveyDeadLetterQueue
+            - Arn
+        maxReceiveCount: 2
+  PriceSurveyDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName:
+        Ref: PriceSurveyDeadLetterQueueName
+  PriceSurveyIAMrole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName:
+        Ref: PriceSurveyIAMroleName
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+                - glue.amazonaws.com
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: pricesurveysqslambdaexecutionpolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:*
+                  - sqs:*
+                  - ssm:*
+                Resource: '*'
+        - PolicyName: pricesurveylambdacloudwatchexecutiontpolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: logs:CreateLogGroup
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+  pricesurveysqslambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: 
+        Ref: LambdaFunctionName
+      Handler: priceSurvey.lambda_handler
+      Role:
+        Fn::GetAtt:
+          - PriceSurveyIAMrole
+          - Arn
+      Code:
+        ZipFile: |
+          def lambda_handler(event, context):
+            message = "Hello Lambda World!!!"
+            return message
+      Runtime: python3.7
+      MemorySize: 128
+      Timeout: 30
+    DependsOn:
+      - PriceSurveyIAMrole
+  lambdaSqs:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      Enabled: true
+      EventSourceArn: arn:aws:sqs:us-east-2:470174335172:priceSurvey_sqs
+      FunctionName:
+        Ref: pricesurveysqslambda
