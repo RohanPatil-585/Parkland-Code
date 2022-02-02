@@ -1,0 +1,59 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Template to create parameters in aws parameter store.
+Resources:
+  IntradayFilesExtensions:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Description: These extensions will be used for identifying the files
+      Name: intraday_files_extensions
+      Type: StringList
+      Value: 'setx,br,cdg,err,pos,html,sft'
+  PriceSurveyPrefixXmlFiles:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Description: These extensions will be used for identifying the files
+      Name: Price_survey_prefix_xmlfiles
+      Type: StringList
+      Value: 'PIC,PS,PCX'
+  IntradayPrefixXmlFiles:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Description: These prefix will be used for identifying the files
+      Name: intraday_prefix_xmlfiles
+      Type: StringList
+      Value: 'PCINFO,BTDay'
+  EODPrefixXmlFiles:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Description: These prefix will be used for identifying the files of EOD
+      Name: EOD_prefix_xmlfiles
+      Type: StringList
+      Value: 'FGM,FPM,ISM,MCM,MSM,TSM,OnTheRun'
+  BullochSmbBucket:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Description: Destination bucket for intraday files
+      Name: bulloch-smb-bucket
+      Type: String
+      Value: bulloch-smb-bucket
+  IntradayFilesSqs:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Description: sqs connection of intraday lambda
+      Name: intraday_sqs
+      Type: String
+      Value: intraday_sqs
+  EODFilesSqs:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Description: sqs connection of EOD lambda
+      Name: EOD_sqs
+      Type: String
+      Value: EOD_sqs
+  PriceSurveyFilesSqs:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Description: sqs connection of Price Survey lambda
+      Name: Price_survey_sqs
+      Type: String
+      Value: Price_survey_sqs

@@ -1,0 +1,25 @@
+name: Create Intraday Lambda
+
+on:
+  # push:
+  workflow_dispatch:
+    branches:
+      - master
+jobs:
+  create-intraday-lambda:
+    name: create intraday lambda
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+      - uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+
+      - run: aws cloudformation create-stack --stack-name stack-for-intraday-lambda --template-body file://intraday.yaml
+             --parameters ParameterKey=LambdaFunctionName,ParameterValue=Intraday_lambda
+             ParameterKey=IntradaySourceQueueName,ParameterValue=intraday_sqs
+             ParameterKey=IntradayDeadLetterQueueName,ParameterValue=intraday_dlq
+             ParameterKey=IntradayIAMroleName,ParameterValue=intradayrole --capabilities CAPABILITY_NAMED_IAM

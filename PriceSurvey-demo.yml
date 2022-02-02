@@ -1,0 +1,178 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: This stack deploys an AWS Lambda function in existing VPC and subnets,
+  creates a secret in AWS Secrets Manager, and a VPC Endpoint for Secrets Manager.
+Parameters:
+  PriceSurveyVPC:
+    Description: Select a VPC to deploy resources.
+    Type: String
+    Default: vpc-xxxxxxx
+  PriceSurveySubnets:
+    Description: Select multiple subnets from selected VPC.
+    Type: List<AWS::EC2::Subnet::Id>
+    Default: subnet-yyyyyyyy,subnet-zzzzzzzz
+  FileServersPriceSurveyCIDR:
+    AllowedPattern: ((\d{1,3})\.){3}\d{1,3}/\d{1,2}
+    Default: 172.31.0.0/16
+    Description: Required for Security Groups. Enter CIDR Block (eg 172.31.0.0/16)
+      for your file servers, You can add more entries in the prefix list resource.
+    Type: String
+Resources:
+  PriceSurveyFileServersNew1PrefixList:
+    Type: AWS::EC2::PrefixList
+    Properties:
+      PrefixListName: FS-CIDRs
+      AddressFamily: IPv4
+      MaxEntries: 10
+      Entries:
+        - Cidr: !Ref 'FileServersPriceSurveyCIDR'
+          Description: CIDR block for File Servers
+      Tags:
+        - Key: Name
+          Value: FS Prefix List
+  LambdaNewSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref 'PriceSurveyVPC'
+      GroupDescription: SG for SMB Lambda
+      Tags:
+        - Key: Name
+          Value: LambdaSMBSG
+  LambdaSGEgress3:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      DestinationSecurityGroupId: !GetAtt 'SecretsManagerPriceSurveyVpceSG.GroupId'
+      Description: HTTPS outbound to Secrets Manager VPC Endpoint
+      GroupId: !GetAtt 'LambdaNewSG.GroupId'
+  LambdaSGEgress4:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      IpProtocol: tcp
+      FromPort: 445
+      ToPort: 445
+      DestinationPrefixListId: !Ref 'PriceSurveyFileServersNew1PrefixList'
+      Description: SMB outbound access to file servers CIDRs
+      GroupId: !GetAtt 'LambdaNewSG.GroupId'
+  SecretsManagerPriceSurveyVpceSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref 'PriceSurveyVPC'
+      GroupDescription: SG for Secrets Manager VPC endpoint
+      Tags:
+        - Key: Name
+          Value: SecretsManagerPriceSurveyVpceSG
+  SecretsManagerVpceSGIngress5:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId: !GetAtt 'LambdaNewSG.GroupId'
+      Description: HTTPS inbound from Lambda
+      GroupId: !GetAtt 'SecretsManagerPriceSurveyVpceSG.GroupId'
+  SecretsManagerVpceSGEgress6:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      DestinationSecurityGroupId: !GetAtt 'LambdaNewSG.GroupId'
+      Description: HTTPS outbound to Lambda
+      GroupId: !GetAtt 'SecretsManagerPriceSurveyVpceSG.GroupId'
+  SecretsManagerPriceSurveyVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action:
+              - secretsmanager:GetSecretValue
+            Resource: !Sub '${PriceSurveySecret}'
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.secretsmanager'
+      SubnetIds: !Split
+        - ','
+        - Fn::Join:
+            - ','
+            - !Ref 'PriceSurveySubnets'
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !Ref 'SecretsManagerPriceSurveyVpceSG'
+      VpcId: !Ref 'PriceSurveyVPC'
+  PriceSurveySecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: FSPriceSurveycredentials
+      Description: This secret has a hardcoded password in SecretString, replace in
+        Secrets Manager.
+      SecretString: '{"username":"parkland\\pci-test-sftp","password":"ZHi(U9@3WC4&nl(@","host":"10.250.240.112","share":"FS-secret-sharename"}'
+      Tags:
+        - Key: AppName
+          Value: AppB
+  PriceSurveySecretResourcePolicy:
+    Type: AWS::SecretsManager::ResourcePolicy
+    Properties:
+      SecretId: !Ref 'PriceSurveySecret'
+      ResourcePolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: EnableSecretsManagerpermissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub '${AWS::AccountId}'
+            Action: secretsmanager:*
+            Resource: '*'
+          - Sid: RestrictGetSecretValueoperation
+            Effect: Deny
+            Principal: '*'
+            Action: secretsmanager:GetSecretValue
+            Resource: '*'
+            Condition:
+              StringNotEquals:
+                aws:sourceVpce: !Sub '${SecretsManagerPriceSurveyVPCEndpoint}'
+  SMBLayerPriceSurvey:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: smbprotocolNew1Layer
+      Description: Contains dependencies for smbprotocol library.
+      ContentUri: s3://aws-sam-cli-managed-default-samclisourcebucket-14h1ja1vfv7nd/sam-app/51532a45145504543944e4d6fda7b3f6
+      CompatibleRuntimes:
+        - python3.9
+        - python3.8
+        - python3.7
+        - python3.6
+      LicenseInfo: 'Available under the MIT-0 license.'
+      RetentionPolicy: Delete
+    Metadata:
+      BuildMethod: python3.7
+  SMBFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: lambda_function.lambda_handler
+      Layers:
+        - !Ref SMBLayerPriceSurvey
+      Runtime: python3.7
+      CodeUri: s3://aws-sam-cli-managed-default-samclisourcebucket-14h1ja1vfv7nd/sam-app/9081ee20a352bcb5d1115d86384780e8
+      Description: A function to integarte with SMB file servers
+      MemorySize: 512
+      Timeout: 30
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Sub '${PriceSurveySecret}'
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref 'LambdaNewSG'
+        SubnetIds: !Split
+          - ','
+          - Fn::Join:
+              - ','
+              - !Ref 'PriceSurveySubnets'

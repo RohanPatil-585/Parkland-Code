@@ -1,0 +1,68 @@
+name: Update s3upload Lambda
+
+on:
+  # push:
+  workflow_dispatch:
+    branches: [master,First_Branch]
+  workflow_run:
+    workflows: ["Create s3 bucket and lambda"]
+    types: [completed]
+
+jobs:
+  sleep-time:
+    name: sleep-time
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          time: '30s'
+      - run: sleep 30s
+        shell: bash
+  update-file-parser-lambda:
+    name: update file parser lambda
+    runs-on: ubuntu-latest
+    needs: sleep-time
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+      - uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+      - run: zip -j s3upload-deployment-package.zip pythonfiles/fileParser/fileParser.py
+      - run: aws lambda update-function-code --function-name file_parser --zip-file fileb://s3upload-deployment-package.zip
+  sleep-time1:
+    name: sleep-time
+    runs-on: ubuntu-latest
+    needs: update-file-parser-lambda
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          time: '30s'
+      - run: sleep 30s
+        shell: bash
+  sleep-time2:
+    name: sleep-time
+    runs-on: ubuntu-latest
+    needs: sleep-time1
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          time: '30s'
+      - run: sleep 30s
+        shell: bash
+  sleep-time3:
+    name: sleep-time
+    runs-on: ubuntu-latest
+    needs: sleep-time2
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          time: '30s'
+      - run: sleep 30s
+        shell: bash            

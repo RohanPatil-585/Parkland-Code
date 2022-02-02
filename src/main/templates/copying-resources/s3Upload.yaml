@@ -1,0 +1,177 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Template to create s3 bucket in aws.
+Parameters:
+  LambdaFunctionName:
+    Type: String
+    Description: Lambda function name.
+  s3BucketName:
+    Type: String
+    Description: S3 Bucket name.
+Resources:
+  uploaderlambda:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName:
+        Ref: LambdaFunctionName
+      Handler: file_parser.lambda_handler
+      Role:
+        Fn::GetAtt:
+          - Mycfs3lambdaexecutionrole
+          - Arn
+      Code:
+        ZipFile: |
+          def lambda_handler(event, context):
+            message = "Hello Lambda World!"
+            return message
+      Runtime: python3.7
+      MemorySize: 128
+      Timeout: 30
+  Mycfs3lambdaexecutionrole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Policies:
+        - PolicyName: allowLogging
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:*'
+                Resource: 'arn:aws:logs:*:*:*'
+        - PolicyName: allowSqsFullAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Action:
+                  - sqs:*
+                Effect: Allow
+                Resource: '*'
+        - PolicyName: allowS3FullAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:*
+                  - s3-object-lambda:*
+                Resource: '*'
+        - PolicyName: allowCloudwatchFullAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Action:
+                  - autoscaling:Describe*
+                  - cloudwatch:*
+                  - logs:*
+                  - sns:*
+                  - iam:GetPolicy
+                  - iam:GetPolicyVersion
+                  - iam:GetRole
+                Effect: Allow
+                Resource: '*'
+              - Effect: Allow
+                Action: iam:CreateServiceLinkedRole
+                Resource: >-
+                  arn:aws:iam::*:role/aws-service-role/events.amazonaws.com/AWSServiceRoleForCloudWatchEvents*
+                Condition:
+                  StringLike:
+                    iam:AWSServiceName: events.amazonaws.com
+        - PolicyName: allowSesFullAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ses:*
+                Resource: '*'
+        - PolicyName: allowLambdaVPCAccessExecutionRoleAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - ec2:CreateNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DeleteNetworkInterface
+                  - ec2:AssignPrivateIpAddresses
+                  - ec2:UnassignPrivateIpAddresses
+                Resource: '*'
+        - PolicyName: getAndDeleteObjects
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:*'
+                  - 'sqs:*'
+                Resource: '*'
+        - PolicyName: ssmrole
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'cloudwatch:PutMetricData'
+                  - 'ds:CreateComputer'
+                  - 'ds:DescribeDirectories'
+                  - 'ec2:DescribeInstanceStatus'
+                  - 'logs:*'
+                  - 'ssm:*'
+                  - 'ec2messages:*'
+                Resource: '*'
+              - Effect: Allow
+                Action: 'iam:CreateServiceLinkedRole'
+                Resource: >-
+                  arn:aws:iam::*:role/aws-service-role/ssm.amazonaws.com/AWSServiceRoleForAmazonSSM*
+                Condition:
+                  StringLike:
+                    'iam:AWSServiceName': ssm.amazonaws.com
+              - Effect: Allow
+                Action:
+                  - 'iam:DeleteServiceLinkedRole'
+                  - 'iam:GetServiceLinkedRoleDeletionStatus'
+                Resource: >-
+                  arn:aws:iam::*:role/aws-service-role/ssm.amazonaws.com/AWSServiceRoleForAmazonSSM*
+              - Effect: Allow
+                Action:
+                  - 'ssmmessages:CreateControlChannel'
+                  - 'ssmmessages:CreateDataChannel'
+                  - 'ssmmessages:OpenControlChannel'
+                  - 'ssmmessages:OpenDataChannel'
+                Resource: '*'
+  # Bucket:
+  #   Type: 'AWS::S3::Bucket'
+  #   DependsOn:
+  #     - ProcessingLambdaPermission
+  #   Properties:
+  #     BucketName:
+  #       Ref: s3BucketName
+  #     NotificationConfiguration:
+  #       LambdaConfigurations:
+  #         - Event: 's3:ObjectCreated:*'
+  #           Function:
+  #             'Fn::GetAtt':
+  #               - uploaderlambda
+  #               - Arn
+  # ProcessingLambdaPermission:
+  #   Type: 'AWS::Lambda::Permission'
+  #   Properties:
+  #     FunctionName:
+  #       'Fn::GetAtt':
+  #         - uploaderlambda
+  #         - Arn
+  #     Action: 'lambda:InvokeFunction'
+  #     Principal: s3.amazonaws.com
+  #     SourceArn: 'arn:aws:s3:::sftp-source-bucket'

@@ -1,0 +1,26 @@
+name: Create Eod Lambda
+
+on:
+  # push:
+  workflow_dispatch:
+    branches:
+      - master
+      - First_Branch
+jobs:
+  create-eod-lambda:
+    name: create eod lambda
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+      - uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+      
+      - run: aws cloudformation create-stack --stack-name stack-for-eod-lambda --template-body file://EOD.yaml
+             --parameters ParameterKey=LambdaFunctionName,ParameterValue=EOD_lambda
+             ParameterKey=EODSourceQueueName,ParameterValue=eod_sqs
+             ParameterKey=EODDeadLetterQueueName,ParameterValue=eod_dlq
+             ParameterKey=EODIAMroleName,ParameterValue=eodrole --capabilities CAPABILITY_NAMED_IAM
